@@ -1,0 +1,1 @@
+# django-spa-react-postgresql

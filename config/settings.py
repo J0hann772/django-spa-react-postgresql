@@ -33,6 +33,7 @@ ALLOWED_HOSTS = []
 INSTALLED_APPS = [
 # --- 3rd Party ---
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
     'djoser',
     'corsheaders',
 
@@ -156,17 +157,21 @@ REST_FRAMEWORK = {
 
 # --- DJOSER (AUTH) ---
 DJOSER = {
-    'LOGIN_FIELD': 'email', # Мы входим по Email
-    'USER_CREATE_PASSWORD_RETYPE': True, # Требовать повтор пароля при регистрации
+    'LOGIN_FIELD': 'email',
+    'USER_CREATE_PASSWORD_RETYPE': True,
     'SERIALIZERS': {
-        'user_create': 'djoser.serializers.UserCreateSerializer',
-        'user': 'djoser.serializers.UserSerializer',
+        'user_create': 'users.serializers.CustomUserCreateSerializer',
+        'current_user': 'users.serializers.CustomUserSerializer',
+        'user': 'users.serializers.CustomUserSerializer',
     },
 }
 
 # --- JWT SETTINGS ---
 from datetime import timedelta
+
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': True, # При обновлении токена старый сразу умирает
+    'BLACKLIST_AFTER_ROTATION': True, # И попадает в черный список
 }

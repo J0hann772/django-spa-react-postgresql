@@ -14,17 +14,31 @@ class ChoiceSerializer(serializers.ModelSerializer):
         return obj.votes.count()
 
     def get_voters(self, obj):
-        # Показываем список только если итоги подведены
-        if obj.question.show_results:
+        user = self.context.get('request').user
+        room_creator = obj.question.room.creator
+
+        # Определяем, кто смотрит: Создатель или нет?
+        # Сравниваем имя создателя или email
+        is_creator = False
+        if user.is_authenticated:
+            is_creator = (user.display_name == room_creator) or (user.email == room_creator)
+
+        # Показываем список, если это Создатель ИЛИ если включены итоги
+        if is_creator or obj.question.show_results:
             voters_list = []
             for vote in obj.votes.all():
                 if vote.user:
-                    # Если есть имя - берем его, иначе email
                     name = vote.user.display_name if vote.user.display_name else vote.user.email
-                    voters_list.append(f"{name}")
+                    is_guest = False
                 else:
-                    name = vote.guest_nickname or vote.voter_name or "Аноним"
-                    voters_list.append(f"{name} (Гость)")
+                    name = vote.guest_nickname or "Аноним"
+                    is_guest = True
+
+                voters_list.append({
+                    "name": name,
+                    "choice": obj.text,
+                    "is_guest": is_guest
+                })
             return voters_list
         return []
 
@@ -39,9 +53,6 @@ class QuestionSerializer(serializers.ModelSerializer):
 
 class RoomSerializer(serializers.ModelSerializer):
     questions = QuestionSerializer(many=True, read_only=True)
-
-    # ВОТ ЭТА СТРОКА РЕШАЕТ ПРОБЛЕМУ:
-    # Она говорит Django: "Не жди creator от фронтенда, мы сами разберемся"
     creator = serializers.CharField(read_only=True)
 
     class Meta:
@@ -51,10 +62,11 @@ class RoomSerializer(serializers.ModelSerializer):
 
 class VoteSerializer(serializers.ModelSerializer):
     guest_nickname = serializers.CharField(required=False, allow_blank=True)
+    user = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = Vote
-        fields = ['id', 'choice', 'guest_nickname']
+        fields = ['id', 'choice', 'guest_nickname', 'user']
 
     def validate(self, data):
         user = self.context['request'].user
@@ -63,7 +75,7 @@ class VoteSerializer(serializers.ModelSerializer):
         question = choice.question
 
         if not question.is_active:
-            raise serializers.ValidationError("Голосование остановлено!")
+            raise serializers.ValidationError("Голосование остановлено.")
 
         if not user.is_authenticated and not nickname:
             raise serializers.ValidationError("Гость должен представиться!")

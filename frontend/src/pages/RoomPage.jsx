@@ -11,71 +11,98 @@ const RoomPage = () => {
     const [room, setRoom] = useState(null);
     const [guestName, setGuestName] = useState("");
 
+    // Храним свежие данные юзера, чтобы точно знать, создатель он или нет
+    const [currentUser, setCurrentUser] = useState(null);
+
     const fetchRoom = async () => {
         try {
             const res = await api.get(`/api/rooms/${slug}/`);
             setRoom(res.data);
         } catch (error) {
-            console.error(error);
-            alert("Комната не найдена!");
+            console.error("Ошибка загрузки комнаты", error);
         }
     };
 
+    // Загружаем комнату и профиль юзера при старте
     useEffect(() => {
         fetchRoom();
-        const interval = setInterval(fetchRoom, 5000); // Авто-обновление каждые 5 сек
-        return () => clearInterval(interval);
-    }, [slug]);
 
-    // --- ЛОГИКА УПРАВЛЕНИЯ (ДЛЯ ХОСТА) ---
+        if (user) {
+            api.get('/api/auth/users/me/')
+               .then(res => setCurrentUser(res.data))
+               .catch(err => console.error(err));
+        }
+
+        const interval = setInterval(fetchRoom, 2000); // Быстрое обновление (2 сек)
+        return () => clearInterval(interval);
+    }, [slug, user]);
+
+    // ЛОГИКА ОПРЕДЕЛЕНИЯ СОЗДАТЕЛЯ
+    // Используем currentUser (свежий) или user (из токена)
+    const checkIsCreator = () => {
+        if (!room) return false;
+        const u = currentUser || user;
+        if (!u) return false;
+        return (u.display_name === room.creator) || (u.email === room.creator);
+    };
+    const isCreator = checkIsCreator();
+
     const toggleStatus = async (questionId, field, currentVal) => {
         try {
             await api.patch(`/api/questions/${questionId}/`, { [field]: !currentVal });
             fetchRoom();
-        } catch (e) { alert("Ошибка доступа или сети"); }
+        } catch (e) { alert("Ошибка доступа"); }
     };
 
     const handleBan = async (nickname) => {
-        if (!window.confirm(`Забанить пользователя ${nickname}?`)) return;
+        if (!window.confirm(`Забанить ${nickname}?`)) return;
         try {
             await api.post(`/api/rooms/${slug}/ban_user/`, { nickname });
-            alert("Пользователь забанен");
             fetchRoom();
-        } catch (e) { alert("Ошибка при бане"); }
+            alert("Забанен.");
+        } catch (e) { alert("Ошибка бана"); }
     };
 
-    // --- ГОЛОСОВАНИЕ ---
     const handleVote = async (choiceId) => {
-        // Проверка для Гостя
         if (!user) {
             if (!guestName.trim()) { alert("Представьтесь!"); return; }
             try {
                 await api.post('/api/votes/', { choice: choiceId, guest_nickname: guestName });
+                alert("Голос принят! ✅");
                 fetchRoom();
-            } catch (e) { alert(e.response?.data?.detail || "Ошибка"); }
+            } catch (e) { handleError(e); }
             return;
         }
 
-        // ПРОВЕРКА НИКА ПРЯМО ПЕРЕД ГОЛОСОМ (Фикс твоего бага)
+        // Если юзер, проверяем имя
+        const u = currentUser || user;
+        if (!u.display_name) {
+            if (window.confirm("Заполните имя в профиле. Перейти?")) navigate('/profile');
+            return;
+        }
+
         try {
-            const res = await api.get('/api/auth/users/me/');
-            if (!res.data.display_name) {
-                if (window.confirm("Нужно заполнить ник. Перейти в профиль?")) navigate('/profile');
-                return;
-            }
             await api.post('/api/votes/', { choice: choiceId });
+            alert("Голос принят! ✅");
             fetchRoom();
-        } catch (e) { alert(e.response?.data?.detail || "Ошибка"); }
+        } catch (e) { handleError(e); }
+    };
+
+    const handleError = (error) => {
+        if (error.response?.data?.non_field_errors) alert(error.response.data.non_field_errors[0]);
+        else if (error.response?.data?.detail) alert(error.response.data.detail);
+        else alert("Ошибка при голосовании");
     };
 
     if (!room) return <div style={{padding: 20}}>Загрузка...</div>;
 
-    const isCreator = user && (user.display_name === room.creator || user.email === room.creator);
-
-    // Собираем список всех проголосовавших для сайдбара
-    const voters = [];
-    room.questions.forEach(q => q.choices.forEach(c => { if (c.voters) voters.push(...c.voters) }));
-    const uniqueVoters = [...new Set(voters)];
+    // Собираем список голосов
+    const allVotes = [];
+    room.questions.forEach(q => {
+        q.choices.forEach(c => {
+            if (c.voters && c.voters.length > 0) allVotes.push(...c.voters);
+        });
+    });
 
     return (
         <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '20px', fontFamily: 'Arial', display: 'flex', gap: '30px', flexWrap: 'wrap' }}>
@@ -85,10 +112,11 @@ const RoomPage = () => {
                 <Link to="/" style={{ textDecoration: 'none', color: '#666' }}>← К списку</Link>
                 <h1>{room.title}</h1>
                 <p style={{ color: '#666' }}>{room.description}</p>
+                {isCreator && <div style={{background:'#2ecc71', color:'white', padding:'5px', borderRadius:'4px', marginBottom:'10px', display:'inline-block'}}>👑 Вы - Создатель (Видите всё)</div>}
 
                 {!user && (
                     <div style={{ background: '#fff3cd', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
-                        <strong>👋 Гость:</strong> <input type="text" value={guestName} onChange={e => setGuestName(e.target.value)} placeholder="Твое имя..." style={{ padding: '5px' }} />
+                        <strong>👋 Гость:</strong> <input type="text" value={guestName} onChange={e => setGuestName(e.target.value)} placeholder="Ваше имя..." style={{ padding: '5px', marginLeft: '10px' }} />
                     </div>
                 )}
 
@@ -97,14 +125,14 @@ const RoomPage = () => {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                             <h3 style={{ margin: 0 }}>{q.is_active ? '❓' : '⛔'} {q.text}</h3>
 
-                            {/* Кнопки хоста */}
+                            {/* ПАНЕЛЬ УПРАВЛЕНИЯ */}
                             {isCreator && (
                                 <div style={{ display: 'flex', gap: '5px' }}>
-                                    <button onClick={() => toggleStatus(q.id, 'is_active', q.is_active)} style={{ fontSize: '11px', padding: '5px', cursor: 'pointer', background: q.is_active ? '#e74c3c' : '#27ae60', color: 'white', border: 'none', borderRadius: '4px' }}>
-                                        {q.is_active ? 'СТОП' : 'ПУСК'}
+                                    <button onClick={() => toggleStatus(q.id, 'is_active', q.is_active)} style={{ fontSize: '12px', padding: '8px 12px', cursor: 'pointer', background: q.is_active ? '#e74c3c' : '#27ae60', color: 'white', border: 'none', borderRadius: '4px' }}>
+                                        {q.is_active ? '⏹ ОСТАНОВИТЬ' : '▶ ЗАПУСТИТЬ'}
                                     </button>
-                                    <button onClick={() => toggleStatus(q.id, 'show_results', q.show_results)} style={{ fontSize: '11px', padding: '5px', cursor: 'pointer', background: '#3498db', color: 'white', border: 'none', borderRadius: '4px' }}>
-                                        {q.show_results ? 'СКРЫТЬ ИТОГИ' : 'ПОДВЕСТИ ИТОГИ'}
+                                    <button onClick={() => toggleStatus(q.id, 'show_results', q.show_results)} style={{ fontSize: '12px', padding: '8px 12px', cursor: 'pointer', background: q.show_results ? '#7f8c8d' : '#3498db', color: 'white', border: 'none', borderRadius: '4px' }}>
+                                        {q.show_results ? '👁 СКРЫТЬ ИТОГИ' : '🏁 ПОКАЗАТЬ ИТОГИ'}
                                     </button>
                                 </div>
                             )}
@@ -115,21 +143,22 @@ const RoomPage = () => {
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <span>{c.text}</span>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                        {q.show_results ? (
+                                        {/* Если создатель или итоги открыты -> показываем цифры */}
+                                        {(isCreator || q.show_results) ? (
                                             <span style={{ fontWeight: 'bold' }}>{c.votes_count}</span>
                                         ) : (
                                             <span style={{ color: '#ccc' }}>??</span>
                                         )}
+
                                         <button onClick={() => handleVote(c.id)} disabled={!q.is_active} style={{ cursor: q.is_active ? 'pointer' : 'not-allowed', padding: '5px 10px', background: q.is_active ? '#3498db' : '#ccc', color: 'white', border: 'none', borderRadius: '4px' }}>
                                             Выбрать
                                         </button>
                                     </div>
                                 </div>
-
                                 {/* Список имен под вариантом */}
-                                {q.show_results && c.voters && c.voters.length > 0 && (
-                                    <div style={{ fontSize: '11px', color: '#888', marginTop: '8px', borderTop: '1px solid #eee', paddingTop: '5px' }}>
-                                        {c.voters.join(', ')}
+                                {c.voters && c.voters.length > 0 && (
+                                    <div style={{ fontSize: '11px', color: '#555', marginTop: '8px', borderTop: '1px solid #eee', paddingTop: '5px' }}>
+                                        <strong>Голосовали:</strong> {c.voters.map(v => v.name).join(', ')}
                                     </div>
                                 )}
                             </div>
@@ -138,20 +167,31 @@ const RoomPage = () => {
                 ))}
             </div>
 
-            {/* ПРАВАЯ ЧАСТЬ: ПАНЕЛЬ ХОСТА / СПИСОК УЧАСТНИКОВ */}
-            <div style={{ flex: '1 1 250px', background: '#fcfcfc', padding: '20px', borderRadius: '12px', border: '1px solid #eee', minHeight: '200px' }}>
-                <h4 style={{ marginTop: 0 }}>👥 Участники ({uniqueVoters.length})</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {uniqueVoters.map(v => (
-                        <div key={v} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', padding: '5px', borderBottom: '1px solid #f0f0f0' }}>
-                            <span>{v}</span>
-                            {isCreator && (
-                                <button onClick={() => handleBan(v)} style={{ color: '#e74c3c', border: 'none', background: 'none', cursor: 'pointer', fontSize: '11px' }}>Выгнать</button>
-                            )}
-                        </div>
-                    ))}
-                </div>
-                {uniqueVoters.length === 0 && <p style={{ fontSize: '12px', color: '#999' }}>Пока никто не голосовал...</p>}
+            {/* ПРАВАЯ ЧАСТЬ: ЛЕНТА ГОЛОСОВ (REAL-TIME) */}
+            <div style={{ flex: '1 1 250px', background: '#fcfcfc', padding: '20px', borderRadius: '12px', border: '1px solid #eee', alignSelf: 'flex-start', maxHeight:'80vh', overflowY:'auto' }}>
+                <h4 style={{ marginTop: 0 }}>📊 Лента голосов ({allVotes.length})</h4>
+
+                {allVotes.length === 0 ? (
+                    <p style={{ fontSize: '12px', color: '#999' }}>Список пуст (или скрыт)...</p>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {allVotes.map((v, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', padding: '10px', background: 'white', border: '1px solid #eee', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                                <div>
+                                    <div style={{fontWeight:'bold', color: '#2c3e50'}}>{v.name}</div>
+                                    <div style={{fontSize:'11px', color:'#7f8c8d'}}>
+                                        Выбрал: <span style={{color: '#2980b9', fontWeight:'bold'}}>{v.choice}</span>
+                                    </div>
+                                </div>
+                                {isCreator && (
+                                    <button onClick={() => handleBan(v.name)} title="Выгнать" style={{ color: '#e74c3c', border: '1px solid #e74c3c', borderRadius:'4px', background: 'none', cursor: 'pointer', padding:'2px 6px', fontSize:'10px' }}>
+                                        BAN
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );

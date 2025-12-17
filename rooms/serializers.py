@@ -2,102 +2,84 @@ from rest_framework import serializers
 from .models import Room, Question, Choice, Vote
 
 
-# --- Вспомогательные сериализаторы ---
 class ChoiceSerializer(serializers.ModelSerializer):
+    votes_count = serializers.SerializerMethodField()
+    voters = serializers.SerializerMethodField()
+
     class Meta:
         model = Choice
-        fields = ['id', 'text', 'votes_count']
+        fields = ['id', 'text', 'votes_count', 'voters']
+
+    def get_votes_count(self, obj):
+        return obj.votes.count()
+
+    def get_voters(self, obj):
+        # Показываем список только если итоги подведены
+        if obj.question.show_results:
+            voters_list = []
+            for vote in obj.votes.all():
+                if vote.user:
+                    # Если есть имя - берем его, иначе email
+                    name = vote.user.display_name if vote.user.display_name else vote.user.email
+                    voters_list.append(f"{name}")
+                else:
+                    name = vote.guest_nickname or vote.voter_name or "Аноним"
+                    voters_list.append(f"{name} (Гость)")
+            return voters_list
+        return []
 
 
 class QuestionSerializer(serializers.ModelSerializer):
-    choices = ChoiceSerializer(many=True, read_only=True)  # Вкладываем варианты
+    choices = ChoiceSerializer(many=True, read_only=True)
 
     class Meta:
         model = Question
-        fields = ['id', 'text', 'choices']
+        fields = ['id', 'text', 'choices', 'is_active', 'show_results']
 
 
-# --- Основной сериализатор комнаты ---
 class RoomSerializer(serializers.ModelSerializer):
-    creator = serializers.StringRelatedField(read_only=True)  # Показываем имя создателя
-    questions = QuestionSerializer(many=True, read_only=True)  # Вкладываем вопросы
+    questions = QuestionSerializer(many=True, read_only=True)
+
+    # ВОТ ЭТА СТРОКА РЕШАЕТ ПРОБЛЕМУ:
+    # Она говорит Django: "Не жди creator от фронтенда, мы сами разберемся"
+    creator = serializers.CharField(read_only=True)
 
     class Meta:
         model = Room
-        fields = ['id', 'creator', 'title', 'description', 'slug', 'is_active', 'questions', 'created_at']
+        fields = ['id', 'title', 'description', 'slug', 'creator', 'questions', 'created_at']
 
 
-# --- Сериализатор для ГОЛОСОВАНИЯ ---
 class VoteSerializer(serializers.ModelSerializer):
-    # Поле только для записи (принимаем ник гостя)
-    guest_nickname = serializers.CharField(required=False, write_only=True)
+    guest_nickname = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = Vote
-        fields = ['choice', 'guest_nickname']
+        fields = ['id', 'choice', 'guest_nickname']
 
     def validate(self, data):
-        """
-        ФЕЙС-КОНТРОЛЬ:
-        1. Гость обязан представиться.
-        2. Нельзя голосовать дважды в одном и том же вопросе.
-        """
         user = self.context['request'].user
         nickname = data.get('guest_nickname')
-        choice = data['choice']  # Тот вариант, за который хотят проголосовать
-        question = choice.question  # Вопрос, к которому относится этот вариант
+        choice = data['choice']
+        question = choice.question
 
-        # --- Проверка 1: Гость без имени ---
+        if not question.is_active:
+            raise serializers.ValidationError("Голосование остановлено!")
+
         if not user.is_authenticated and not nickname:
-            raise serializers.ValidationError("Гость обязан представиться! Укажите поле guest_nickname.")
-
-        # --- Проверка 2: Дубликаты (Самое важное) ---
-        # Мы ищем в базе: есть ли уже голос (Vote), который:
-        # а) Принадлежит этому юзеру (или этому нику)
-        # б) Сделан за ЛЮБОЙ вариант ответа (choice) ВНУТРИ ЭТОГО ВОПРОСА (question)
+            raise serializers.ValidationError("Гость должен представиться!")
 
         if user.is_authenticated:
-            # Если это зарегистрированный пользователь
-            has_voted = Vote.objects.filter(
-                user=user,
-                choice__question=question  # <-- Магия Django: ищем через связь choice -> question
-            ).exists()
+            has_voted = Vote.objects.filter(user=user, choice__question=question).exists()
         else:
-            # Если это гость (проверяем по нику)
-            has_voted = Vote.objects.filter(
-                voter_name=nickname,
-                choice__question=question
-            ).exists()
+            has_voted = Vote.objects.filter(guest_nickname=nickname, choice__question=question).exists()
 
         if has_voted:
-            raise serializers.ValidationError("Вы уже голосовали в этом вопросе! Хитрить нельзя.")
+            raise serializers.ValidationError({"non_field_errors": ["Вы уже голосовали!"]})
 
         return data
 
     def create(self, validated_data):
         user = self.context['request'].user
-        nickname = validated_data.pop('guest_nickname', None)
-        choice = validated_data['choice']
-
-        # Определяем имя
         if user.is_authenticated:
-            voter_name = user.display_name if user.display_name else user.email
-            vote_user = user
-        else:
-            voter_name = nickname
-            vote_user = None
-
-        # 1. Создаем голос
-        vote = Vote.objects.create(
-            choice=choice,
-            user=vote_user,
-            voter_name=voter_name
-        )
-
-        # 2. Увеличиваем счетчик в варианте ответа (атомарно, чтобы не было гонок)
-        from django.db.models import F
-        choice.votes_count = F('votes_count') + 1
-        choice.save()
-        choice.refresh_from_db()  # Обновляем данные
-
-        return vote
+            validated_data['user'] = user
+        return super().create(validated_data)

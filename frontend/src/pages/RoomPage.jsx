@@ -23,109 +23,136 @@ const RoomPage = () => {
 
     useEffect(() => {
         fetchRoom();
+        const interval = setInterval(fetchRoom, 5000); // Авто-обновление каждые 5 сек
+        return () => clearInterval(interval);
     }, [slug]);
 
-    const getNoun = (number, one, two, five) => {
-        let n = Math.abs(number) % 100;
-        if (n >= 5 && n <= 20) return five;
-        n %= 10;
-        if (n === 1) return one;
-        if (n >= 2 && n <= 4) return two;
-        return five;
+    // --- ЛОГИКА УПРАВЛЕНИЯ (ДЛЯ ХОСТА) ---
+    const toggleStatus = async (questionId, field, currentVal) => {
+        try {
+            await api.patch(`/api/questions/${questionId}/`, { [field]: !currentVal });
+            fetchRoom();
+        } catch (e) { alert("Ошибка доступа или сети"); }
     };
 
+    const handleBan = async (nickname) => {
+        if (!window.confirm(`Забанить пользователя ${nickname}?`)) return;
+        try {
+            await api.post(`/api/rooms/${slug}/ban_user/`, { nickname });
+            alert("Пользователь забанен");
+            fetchRoom();
+        } catch (e) { alert("Ошибка при бане"); }
+    };
+
+    // --- ГОЛОСОВАНИЕ ---
     const handleVote = async (choiceId) => {
-        // 1. Если это Гость (не авторизован)
+        // Проверка для Гостя
         if (!user) {
-            if (!guestName.trim()) {
-                alert("Пожалуйста, представьтесь!");
-                return;
-            }
-            // Гости голосуют сразу
+            if (!guestName.trim()) { alert("Представьтесь!"); return; }
             try {
                 await api.post('/api/votes/', { choice: choiceId, guest_nickname: guestName });
                 fetchRoom();
-            } catch (error) {
-                handleError(error);
-            }
+            } catch (e) { alert(e.response?.data?.detail || "Ошибка"); }
             return;
         }
 
-        // 2. Если это Юзер — ДЕЛАЕМ ПРОВЕРКУ ПРЯМО СЕЙЧАС
-        // Не верим старым данным, спрашиваем сервер: "Какое у меня сейчас имя?"
+        // ПРОВЕРКА НИКА ПРЯМО ПЕРЕД ГОЛОСОМ (Фикс твоего бага)
         try {
-            const profileRes = await api.get('/api/auth/users/me/');
-            const freshProfile = profileRes.data;
-
-            if (!freshProfile.display_name) {
-                // Если даже на сервере имени нет — тогда отправляем в профиль
-                if (window.confirm("Чтобы голосовать, нужно заполнить имя. Перейти в профиль?")) {
-                    navigate('/profile');
-                }
+            const res = await api.get('/api/auth/users/me/');
+            if (!res.data.display_name) {
+                if (window.confirm("Нужно заполнить ник. Перейти в профиль?")) navigate('/profile');
                 return;
             }
-
-            // Если имя есть — голосуем!
             await api.post('/api/votes/', { choice: choiceId });
-            fetchRoom(); // Обновляем цифры
-
-        } catch (error) {
-            handleError(error);
-        }
-    };
-
-    // Функция для красивого вывода ошибок
-    const handleError = (error) => {
-        if (error.response?.data?.non_field_errors) {
-            alert(error.response.data.non_field_errors[0]);
-        } else if (error.response?.data?.detail) {
-            alert(error.response.data.detail);
-        } else {
-            alert("Ошибка при голосовании");
-        }
+            fetchRoom();
+        } catch (e) { alert(e.response?.data?.detail || "Ошибка"); }
     };
 
     if (!room) return <div style={{padding: 20}}>Загрузка...</div>;
 
+    const isCreator = user && (user.display_name === room.creator || user.email === room.creator);
+
+    // Собираем список всех проголосовавших для сайдбара
+    const voters = [];
+    room.questions.forEach(q => q.choices.forEach(c => { if (c.voters) voters.push(...c.voters) }));
+    const uniqueVoters = [...new Set(voters)];
+
     return (
-        <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px', fontFamily: 'Arial' }}>
-            <Link to="/" style={{ textDecoration: 'none', color: '#666' }}>← К списку</Link>
-            <h1>{room.title}</h1>
-            <p style={{ color: '#7f8c8d' }}>{room.description}</p>
+        <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '20px', fontFamily: 'Arial', display: 'flex', gap: '30px', flexWrap: 'wrap' }}>
 
-            {!user && (
-                <div style={{ background: '#fff3cd', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
-                    <strong>👋 Вы как Гость:</strong><br />
-                    <input
-                        type="text"
-                        placeholder="Ваше имя..."
-                        value={guestName}
-                        onChange={e => setGuestName(e.target.value)}
-                        style={{ marginTop: '10px', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-                    />
-                </div>
-            )}
+            {/* ЛЕВАЯ ЧАСТЬ: ВОПРОСЫ */}
+            <div style={{ flex: '2 1 500px' }}>
+                <Link to="/" style={{ textDecoration: 'none', color: '#666' }}>← К списку</Link>
+                <h1>{room.title}</h1>
+                <p style={{ color: '#666' }}>{room.description}</p>
 
-            {room.questions.map(q => (
-                <div key={q.id} style={{ marginBottom: '25px', padding: '20px', background: 'white', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
-                    <h3 style={{ marginTop: 0 }}>❓ {q.text}</h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {q.choices.map(choice => (
-                            <div key={choice.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8f9fa', padding: '10px 15px', borderRadius: '5px' }}>
-                                <span>{choice.text}</span>
-                                <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                                    <span style={{ fontWeight: 'bold' }}>
-                                        {choice.votes_count} {getNoun(choice.votes_count, 'голос', 'голоса', 'голосов')}
-                                    </span>
-                                    <button onClick={() => handleVote(choice.id)} style={{ padding: '8px 15px', background: '#3498db', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
-                                        ✔ Выбрать
+                {!user && (
+                    <div style={{ background: '#fff3cd', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
+                        <strong>👋 Гость:</strong> <input type="text" value={guestName} onChange={e => setGuestName(e.target.value)} placeholder="Твое имя..." style={{ padding: '5px' }} />
+                    </div>
+                )}
+
+                {room.questions.map(q => (
+                    <div key={q.id} style={{ marginBottom: '30px', padding: '20px', background: '#fff', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', border: q.is_active ? '1px solid #eee' : '2px solid #e74c3c' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                            <h3 style={{ margin: 0 }}>{q.is_active ? '❓' : '⛔'} {q.text}</h3>
+
+                            {/* Кнопки хоста */}
+                            {isCreator && (
+                                <div style={{ display: 'flex', gap: '5px' }}>
+                                    <button onClick={() => toggleStatus(q.id, 'is_active', q.is_active)} style={{ fontSize: '11px', padding: '5px', cursor: 'pointer', background: q.is_active ? '#e74c3c' : '#27ae60', color: 'white', border: 'none', borderRadius: '4px' }}>
+                                        {q.is_active ? 'СТОП' : 'ПУСК'}
+                                    </button>
+                                    <button onClick={() => toggleStatus(q.id, 'show_results', q.show_results)} style={{ fontSize: '11px', padding: '5px', cursor: 'pointer', background: '#3498db', color: 'white', border: 'none', borderRadius: '4px' }}>
+                                        {q.show_results ? 'СКРЫТЬ ИТОГИ' : 'ПОДВЕСТИ ИТОГИ'}
                                     </button>
                                 </div>
+                            )}
+                        </div>
+
+                        {q.choices.map(c => (
+                            <div key={c.id} style={{ background: '#f8f9fa', padding: '12px', borderRadius: '8px', marginBottom: '10px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span>{c.text}</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        {q.show_results ? (
+                                            <span style={{ fontWeight: 'bold' }}>{c.votes_count}</span>
+                                        ) : (
+                                            <span style={{ color: '#ccc' }}>??</span>
+                                        )}
+                                        <button onClick={() => handleVote(c.id)} disabled={!q.is_active} style={{ cursor: q.is_active ? 'pointer' : 'not-allowed', padding: '5px 10px', background: q.is_active ? '#3498db' : '#ccc', color: 'white', border: 'none', borderRadius: '4px' }}>
+                                            Выбрать
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Список имен под вариантом */}
+                                {q.show_results && c.voters && c.voters.length > 0 && (
+                                    <div style={{ fontSize: '11px', color: '#888', marginTop: '8px', borderTop: '1px solid #eee', paddingTop: '5px' }}>
+                                        {c.voters.join(', ')}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
+                ))}
+            </div>
+
+            {/* ПРАВАЯ ЧАСТЬ: ПАНЕЛЬ ХОСТА / СПИСОК УЧАСТНИКОВ */}
+            <div style={{ flex: '1 1 250px', background: '#fcfcfc', padding: '20px', borderRadius: '12px', border: '1px solid #eee', minHeight: '200px' }}>
+                <h4 style={{ marginTop: 0 }}>👥 Участники ({uniqueVoters.length})</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {uniqueVoters.map(v => (
+                        <div key={v} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', padding: '5px', borderBottom: '1px solid #f0f0f0' }}>
+                            <span>{v}</span>
+                            {isCreator && (
+                                <button onClick={() => handleBan(v)} style={{ color: '#e74c3c', border: 'none', background: 'none', cursor: 'pointer', fontSize: '11px' }}>Выгнать</button>
+                            )}
+                        </div>
+                    ))}
                 </div>
-            ))}
+                {uniqueVoters.length === 0 && <p style={{ fontSize: '12px', color: '#999' }}>Пока никто не голосовал...</p>}
+            </div>
         </div>
     );
 };

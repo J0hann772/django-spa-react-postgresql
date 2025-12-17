@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom'; // Добавили useNavigate
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import AuthContext from '../context/AuthContext';
 
 const RoomPage = () => {
     const { slug } = useParams();
     const { user } = useContext(AuthContext);
-    const navigate = useNavigate(); // Инициализация навигации
+    const navigate = useNavigate();
+
     const [room, setRoom] = useState(null);
     const [guestName, setGuestName] = useState("");
 
@@ -24,7 +25,6 @@ const RoomPage = () => {
         fetchRoom();
     }, [slug]);
 
-    // Склонение слов
     const getNoun = (number, one, two, five) => {
         let n = Math.abs(number) % 100;
         if (n >= 5 && n <= 20) return five;
@@ -35,32 +35,53 @@ const RoomPage = () => {
     };
 
     const handleVote = async (choiceId) => {
-        // Проверка для Гостя
-        if (!user && !guestName.trim()) {
-            alert("Пожалуйста, представьтесь!");
-            return;
-        }
-
-        // --- МЯГКОЕ ОГРАНИЧЕНИЕ (ПЕРЕНОС В ПРОФИЛЬ) ---
-        if (user && !user.display_name) {
-            if (window.confirm("Чтобы голосовать, нужно заполнить имя. Перейти в профиль?")) {
-                navigate('/profile');
+        // 1. Если это Гость (не авторизован)
+        if (!user) {
+            if (!guestName.trim()) {
+                alert("Пожалуйста, представьтесь!");
+                return;
+            }
+            // Гости голосуют сразу
+            try {
+                await api.post('/api/votes/', { choice: choiceId, guest_nickname: guestName });
+                fetchRoom();
+            } catch (error) {
+                handleError(error);
             }
             return;
         }
 
+        // 2. Если это Юзер — ДЕЛАЕМ ПРОВЕРКУ ПРЯМО СЕЙЧАС
+        // Не верим старым данным, спрашиваем сервер: "Какое у меня сейчас имя?"
         try {
-            const payload = { choice: choiceId };
-            if (!user) payload.guest_nickname = guestName;
+            const profileRes = await api.get('/api/auth/users/me/');
+            const freshProfile = profileRes.data;
 
-            await api.post('/api/votes/', payload);
-            fetchRoom();
-        } catch (error) {
-            if (error.response?.data?.non_field_errors) {
-                alert(error.response.data.non_field_errors[0]);
-            } else {
-                alert("Ошибка при голосовании");
+            if (!freshProfile.display_name) {
+                // Если даже на сервере имени нет — тогда отправляем в профиль
+                if (window.confirm("Чтобы голосовать, нужно заполнить имя. Перейти в профиль?")) {
+                    navigate('/profile');
+                }
+                return;
             }
+
+            // Если имя есть — голосуем!
+            await api.post('/api/votes/', { choice: choiceId });
+            fetchRoom(); // Обновляем цифры
+
+        } catch (error) {
+            handleError(error);
+        }
+    };
+
+    // Функция для красивого вывода ошибок
+    const handleError = (error) => {
+        if (error.response?.data?.non_field_errors) {
+            alert(error.response.data.non_field_errors[0]);
+        } else if (error.response?.data?.detail) {
+            alert(error.response.data.detail);
+        } else {
+            alert("Ошибка при голосовании");
         }
     };
 

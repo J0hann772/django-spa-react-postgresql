@@ -174,4 +174,5 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     'ROTATE_REFRESH_TOKENS': True, # При обновлении токена старый сразу умирает
     'BLACKLIST_AFTER_ROTATION': True, # И попадает в черный список
+    'UPDATE_LAST_LOGIN': True,
 }

@@ -1,11 +1,12 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import RoomViewSet, QuestionViewSet, VoteCreateView
+from .views import RoomViewSet, QuestionViewSet, VoteCreateView, ChoiceViewSet
 
 # Создаем роутер и регистрируем ViewSets
 router = DefaultRouter()
 router.register(r'rooms', RoomViewSet)
 router.register(r'questions', QuestionViewSet)
+router.register(r'choices', ChoiceViewSet)
 
 # Определяем urlpatterns (ОБЯЗАТЕЛЬНО должна быть эта переменная)
 urlpatterns = [

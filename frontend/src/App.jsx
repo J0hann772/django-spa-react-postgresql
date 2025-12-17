@@ -8,17 +8,39 @@ import { useContext, useEffect, useState } from 'react';
 import AuthContext from './context/AuthContext';
 import api from './api/client';
 
-const HomePage = () => {
+// Компонент-обертка для перехвата 401 ошибки
+const MainLayout = () => {
     let { user, logoutUser } = useContext(AuthContext);
     const [rooms, setRooms] = useState([]);
     const [newTitle, setNewTitle] = useState("");
     const [realUser, setRealUser] = useState(null);
 
-    const fetchRooms = () => api.get('/api/rooms/').then(r => setRooms(r.data)).catch(console.error);
+    // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ БАГА АВТОРИЗАЦИИ ---
+    useEffect(() => {
+        // Создаем перехватчик ответов
+        const interceptor = api.interceptors.response.use(
+            response => response,
+            error => {
+                // Если сервер сказал "401 Unauthorized" (токен умер или юзер вышел)
+                if (error.response && error.response.status === 401) {
+                    console.warn("Сессия истекла, выходим...");
+                    logoutUser(); // Принудительно разлогиниваем на фронте
+                }
+                return Promise.reject(error);
+            }
+        );
+
+        // Удаляем перехватчик при размонтировании, чтобы не дублировались
+        return () => {
+            api.interceptors.response.eject(interceptor);
+        };
+    }, [logoutUser]);
+    // ---------------------------------------------
+
+    const fetchRooms = () => api.get('/api/rooms/').then(r => setRooms(r.data)).catch(e => console.log(e));
 
     useEffect(() => {
         fetchRooms();
-        // Подгружаем имя для шапки сайта
         if (user) {
             api.get('/api/auth/users/me/')
                .then(res => setRealUser(res.data))
@@ -102,7 +124,7 @@ function App() {
         <Router>
             <AuthProvider>
                 <Routes>
-                    <Route path="/" element={<HomePage />} />
+                    <Route path="/" element={<MainLayout />} />
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/register" element={<RegisterPage />} />
                     <Route path="/profile" element={<ProfilePage />} />

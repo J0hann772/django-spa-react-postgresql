@@ -38,14 +38,39 @@ class VoteSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         """
-        ФЕЙС-КОНТРОЛЬ ДЛЯ ГОСТЯ
+        ФЕЙС-КОНТРОЛЬ:
+        1. Гость обязан представиться.
+        2. Нельзя голосовать дважды в одном и том же вопросе.
         """
         user = self.context['request'].user
         nickname = data.get('guest_nickname')
+        choice = data['choice']  # Тот вариант, за который хотят проголосовать
+        question = choice.question  # Вопрос, к которому относится этот вариант
 
-        # Если юзер не залогинен И не прислал ник -> Ошибка
+        # --- Проверка 1: Гость без имени ---
         if not user.is_authenticated and not nickname:
             raise serializers.ValidationError("Гость обязан представиться! Укажите поле guest_nickname.")
+
+        # --- Проверка 2: Дубликаты (Самое важное) ---
+        # Мы ищем в базе: есть ли уже голос (Vote), который:
+        # а) Принадлежит этому юзеру (или этому нику)
+        # б) Сделан за ЛЮБОЙ вариант ответа (choice) ВНУТРИ ЭТОГО ВОПРОСА (question)
+
+        if user.is_authenticated:
+            # Если это зарегистрированный пользователь
+            has_voted = Vote.objects.filter(
+                user=user,
+                choice__question=question  # <-- Магия Django: ищем через связь choice -> question
+            ).exists()
+        else:
+            # Если это гость (проверяем по нику)
+            has_voted = Vote.objects.filter(
+                voter_name=nickname,
+                choice__question=question
+            ).exists()
+
+        if has_voted:
+            raise serializers.ValidationError("Вы уже голосовали в этом вопросе! Хитрить нельзя.")
 
         return data
 

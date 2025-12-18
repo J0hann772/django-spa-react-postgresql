@@ -1,0 +1,104 @@
+.container {
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 0 20px;
+}
+
+/* Навигация */
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 40px;
+    background-color: var(--bg-card);
+    padding: 15px 25px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+}
+
+.navTitle {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--text-main);
+    background: linear-gradient(45deg, var(--primary), #8b5cf6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.authBlock, .guestBlock {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.userName {
+    font-weight: 500;
+    font-size: 0.95rem;
+    color: var(--text-muted);
+}
+.userName strong {
+    color: var(--text-main);
+}
+
+/* Карточка создания комнаты */
+.createRoomCard {
+    background: var(--bg-card);
+    padding: 30px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    margin-bottom: 40px;
+}
+
+.cardHeader {
+    margin-top: 0;
+    margin-bottom: 20px;
+    font-size: 1.25rem;
+    color: var(--text-main);
+}
+
+.createFormRow {
+    display: flex;
+    gap: 15px;
+}
+
+/* Список комнат */
+.sectionHeader {
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.roomItem {
+    background-color: var(--bg-card);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 25px;
+    border-radius: var(--radius-md);
+    margin-bottom: 15px;
+    border: 2px solid transparent;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-sm);
+}
+
+.roomItem:hover {
+    border-color: var(--primary);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.roomTitle {
+    font-size: 1.15rem;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 5px;
+}
+
+.roomMeta {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}

@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, AllowAny
 from rest_framework.exceptions import PermissionDenied
-from .models import Room, Question, Vote, Choice
+from .models import Room, Question, Vote, Choice, RoomBan
 from .serializers import RoomSerializer, QuestionSerializer, VoteSerializer, ChoiceCreateSerializer
 
 
@@ -13,17 +13,16 @@ class RoomViewSet(viewsets.ModelViewSet):
     lookup_field = 'slug'
     permission_classes = [IsAuthenticatedOrReadOnly]
 
-    # --- ОБНОВЛЕННАЯ ПРОВЕРКА ВХОДА ---
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
 
-        # 1. Если пользователь авторизован - проверяем его аккаунт
+        # 1. Если пользователь авторизован
         if request.user.is_authenticated:
             user_name = request.user.display_name or request.user.email
             if self.is_banned(instance, user_name):
                 return Response({"detail": "Бан"}, status=status.HTTP_403_FORBIDDEN)
 
-        # 2. Если гость - проверяем параметр guest_name из запроса
+        # 2. Если гость
         else:
             guest_name = request.query_params.get('guest_name')
             if guest_name and self.is_banned(instance, guest_name):
@@ -34,14 +33,9 @@ class RoomViewSet(viewsets.ModelViewSet):
 
         return super().retrieve(request, *args, **kwargs)
 
-    # Вспомогательный метод проверки
     def is_banned(self, room, name):
-        if hasattr(room, 'banned_users') and room.banned_users:
-            banned_list = room.banned_users.split(',')
-            return name in banned_list
-        return False
-
-    # ----------------------------------
+        # Проверяем наличие записи в таблице банов
+        return RoomBan.objects.filter(room=room, banned_identifier=name).exists()
 
     @action(detail=True, methods=['post'])
     def ban_user(self, request, slug=None):
@@ -55,20 +49,15 @@ class RoomViewSet(viewsets.ModelViewSet):
         if not target_name:
             return Response({"error": "Укажите ник"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if hasattr(room, 'banned_users'):
-            banned_list = room.banned_users.split(',') if room.banned_users else []
-            if target_name not in banned_list:
-                banned_list.append(target_name)
-                room.banned_users = ",".join(banned_list)
-                room.save()
+        # Создаем запись в модели RoomBan (get_or_create чтобы не дублировать)
+        RoomBan.objects.get_or_create(room=room, banned_identifier=target_name)
 
-                # Удаляем все следы пользователя
-                Vote.objects.filter(choice__question__room=room, guest_nickname=target_name).delete()
-                Vote.objects.filter(choice__question__room=room, user__display_name=target_name).delete()
-                Vote.objects.filter(choice__question__room=room, user__email=target_name).delete()
+        # Удаляем все следы пользователя (голоса)
+        Vote.objects.filter(choice__question__room=room, guest_nickname=target_name).delete()
+        Vote.objects.filter(choice__question__room=room, user__display_name=target_name).delete()
+        Vote.objects.filter(choice__question__room=room, user__email=target_name).delete()
 
-            return Response({"status": f"Пользователь {target_name} забанен."})
-        return Response({"error": "Ошибка БД"}, status=500)
+        return Response({"status": f"Пользователь {target_name} забанен."})
 
     def perform_create(self, serializer):
         user = self.request.user
@@ -132,10 +121,9 @@ class VoteCreateView(generics.CreateAPIView):
             try:
                 choice_obj = Choice.objects.get(id=choice_id)
                 room = choice_obj.question.room
-                if hasattr(room, 'banned_users'):
-                    banned_list = room.banned_users.split(',') if room.banned_users else []
-                    if current_name and current_name in banned_list:
-                        return Response({"detail": "Вы забанены!"}, status=status.HTTP_403_FORBIDDEN)
+                # Проверка бана через новую модель
+                if current_name and RoomBan.objects.filter(room=room, banned_identifier=current_name).exists():
+                    return Response({"detail": "Вы забанены!"}, status=status.HTTP_403_FORBIDDEN)
             except Exception:
                 pass
 

@@ -7,114 +7,107 @@ import RoomPage from './pages/RoomPage';
 import { useContext, useEffect, useState } from 'react';
 import AuthContext from './context/AuthContext';
 import api from './api/client';
+import styles from './App.module.css';
 
-// Компонент-обертка для перехвата 401 ошибки
+// Вспомогательный компонент Layout
 const MainLayout = () => {
     let { user, logoutUser } = useContext(AuthContext);
     const [rooms, setRooms] = useState([]);
     const [newTitle, setNewTitle] = useState("");
     const [realUser, setRealUser] = useState(null);
-
-    // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ БАГА АВТОРИЗАЦИИ ---
-    useEffect(() => {
-        // Создаем перехватчик ответов
-        const interceptor = api.interceptors.response.use(
-            response => response,
-            error => {
-                // Если сервер сказал "401 Unauthorized" (токен умер или юзер вышел)
-                if (error.response && error.response.status === 401) {
-                    console.warn("Сессия истекла, выходим...");
-                    logoutUser(); // Принудительно разлогиниваем на фронте
-                }
-                return Promise.reject(error);
-            }
-        );
-
-        // Удаляем перехватчик при размонтировании, чтобы не дублировались
-        return () => {
-            api.interceptors.response.eject(interceptor);
-        };
-    }, [logoutUser]);
-    // ---------------------------------------------
-
-    const fetchRooms = () => api.get('/api/rooms/').then(r => setRooms(r.data)).catch(e => console.log(e));
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         fetchRooms();
         if (user) {
-            api.get('/api/auth/users/me/')
-               .then(res => setRealUser(res.data))
-               .catch(console.error);
+            api.get('/api/auth/users/me/').then(res => setRealUser(res.data));
         }
     }, [user]);
 
-    const deleteRoom = async (slug) => {
+    const fetchRooms = () => api.get('/api/rooms/').then(r => setRooms(r.data));
+
+    const deleteRoom = async (e, slug) => {
+        e.preventDefault(); e.stopPropagation();
         if (!window.confirm("Удалить комнату?")) return;
-        try {
-            await api.delete(`/api/rooms/${slug}/`);
-            fetchRooms();
-        } catch { alert("Ошибка удаления"); }
+        await api.delete(`/api/rooms/${slug}/`); fetchRooms();
     };
 
     const createRoom = async (e) => {
         e.preventDefault();
+        if(!newTitle.trim()) return;
+        setLoading(true);
         try {
-            await api.post('/api/rooms/', { title: newTitle, slug: newTitle.toLowerCase() + '-' + Date.now() });
+            await api.post('/api/rooms/', { title: newTitle, slug: newTitle.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now() });
             setNewTitle(""); fetchRooms();
-        } catch (err) { alert("Ошибка: " + err.response?.data?.detail); }
+        } finally { setLoading(false); }
     };
 
-    const btnStyle = { padding: '8px 15px', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold', color: 'white' };
-
     return (
-        <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px', fontFamily: 'Arial' }}>
-            <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', borderBottom: '2px solid #eee', paddingBottom: '15px' }}>
-                <h1 style={{ margin: 0 }}>Voting SPA</h1>
+        <div className={styles.container}>
+            <nav className={styles.navbar}>
+                <Link to="/"><h1 className={styles.navTitle}>Voting App</h1></Link>
                 <div>
                     {user ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                            {realUser && realUser.display_name ? (
-                                <span style={{ fontWeight: 'bold', color: '#2980b9', fontSize: '1.1em' }}>
-                                    {realUser.display_name}
+                        <div className={styles.authBlock}>
+                            {realUser && (
+                                <span className={styles.userName}>
+                                    Привет, <strong>{realUser.display_name || realUser.email}</strong>
                                 </span>
-                            ) : (
-                                <Link to="/profile">
-                                    <button style={{ ...btnStyle, background: '#f39c12' }}>Заполнить nickname</button>
-                                </Link>
                             )}
-                            <button onClick={logoutUser} style={{ ...btnStyle, background: '#e74c3c' }}>Выйти</button>
+                            <button onClick={logoutUser} className="global-btn btn-danger" style={{padding: '8px 15px'}}>
+                                Выйти
+                            </button>
                         </div>
                     ) : (
-                        <div style={{ display: 'flex', gap: '10px' }}>
-                            <Link to="/register"><button style={{ ...btnStyle, background: '#27ae60' }}>Регистрация</button></Link>
-                            <Link to="/login"><button style={{ ...btnStyle, background: '#2980b9' }}>Войти</button></Link>
+                        <div className={styles.guestBlock}>
+                            <Link to="/login"><button className="global-btn btn-ghost">Войти</button></Link>
+                            <Link to="/register"><button className="global-btn btn-primary">Регистрация</button></Link>
                         </div>
                     )}
                 </div>
             </nav>
 
             {user && (
-                <form onSubmit={createRoom} style={{ background: '#2c3e50', padding: '20px', borderRadius: '10px', color: 'white', marginBottom: '30px' }}>
-                    <h3 style={{ marginTop: 0 }}>🚀 Создать комнату</h3>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                        <input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Название..." required style={{ flex: 1, padding: '10px', borderRadius: '5px' }} />
-                        <button type="submit" style={{ ...btnStyle, background: '#27ae60' }}>Создать</button>
-                    </div>
-                </form>
+                <div className={styles.createRoomCard}>
+                    <h3 className={styles.cardHeader}>🚀 Создать новую комнату</h3>
+                    <form onSubmit={createRoom} className={styles.createFormRow}>
+                        <input
+                            value={newTitle}
+                            onChange={e => setNewTitle(e.target.value)}
+                            placeholder="Название комнаты..."
+                            required
+                            className="global-input"
+                        />
+                        <button type="submit" disabled={loading} className="global-btn btn-primary">
+                            {loading ? '...' : 'Создать'}
+                        </button>
+                    </form>
+                </div>
             )}
 
-            <h3>Активные комнаты:</h3>
-            {rooms.map(room => (
-                <div key={room.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '15px', border: '1px solid #ddd', borderRadius: '8px', marginBottom: '10px' }}>
-                    <Link to={`/room/${room.slug}`} style={{ textDecoration: 'none', color: '#2980b9', flex: 1 }}>
-                        <strong>{room.title}</strong>
-                        <div style={{ fontSize: '0.8em', color: '#666' }}>Создатель: {room.creator}</div>
+            <h4 className={styles.sectionHeader}>Активные комнаты</h4>
+            <div className={styles.roomsList}>
+                {rooms.length === 0 && <p className="text-muted">Комнат пока нет.</p>}
+                {rooms.map(room => (
+                    <Link key={room.id} to={`/room/${room.slug}`}>
+                        <div className={styles.roomItem}>
+                            <div>
+                                <span className={styles.roomTitle}>{room.title}</span>
+                                <span className={styles.roomMeta}>Автор: {room.creator}</span>
+                            </div>
+                            {realUser && (realUser.display_name === room.creator || realUser.email === room.creator) && (
+                                <button
+                                    onClick={(e) => deleteRoom(e, room.slug)}
+                                    className="global-btn btn-danger"
+                                    style={{padding: '6px 12px', fontSize: '0.8em'}}
+                                >
+                                    Удалить
+                                </button>
+                            )}
+                        </div>
                     </Link>
-                    {realUser && realUser.display_name === room.creator && (
-                        <button onClick={() => deleteRoom(room.slug)} style={{ background: 'none', border: '1px solid #e74c3c', color: '#e74c3c', padding: '5px', cursor: 'pointer', borderRadius: '5px' }}>🗑</button>
-                    )}
-                </div>
-            ))}
+                ))}
+            </div>
         </div>
     );
 };
@@ -134,5 +127,4 @@ function App() {
         </Router>
     );
 }
-
 export default App;

@@ -1,6 +1,119 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Палитра цветов */
+  --bg-page: #f3f4f6;       /* Светло-серый фон страницы */
+  --bg-card: #ffffff;       /* Белые карточки */
+  --text-main: #111827;     /* Почти черный текст */
+  --text-muted: #6b7280;    /* Серый текст */
+
+  --primary: #4f46e5;       /* Индиго - основной акцент */
+  --primary-hover: #4338ca;
+  --success: #10b981;       /* Зеленый */
+  --danger: #ef4444;        /* Красный */
+  --border-color: #e5e7eb;
+
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
 body {
   margin: 0;
-  padding: 0;
-  font-family: Arial, sans-serif;
-  background-color: #f4f6f8; /* Легкий серый фон для всего сайта */
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-page);
+  color: var(--text-main);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+
+a {
+    text-decoration: none;
+    color: inherit;
+}
+
+/* --- Глобальные утилиты для форм и кнопок --- */
+
+/* Базовый инпут */
+.global-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    background-color: #f9fafb;
+    transition: all 0.2s;
+    box-sizing: border-box; /* Важно для отступов */
+    outline: none;
+}
+
+.global-input:focus {
+    border-color: var(--primary);
+    background-color: var(--bg-card);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+/* Базовая кнопка */
+.global-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.global-btn:active:not(:disabled) {
+    transform: scale(0.97); /* Эффект пружины */
+}
+
+.global-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Варианты кнопок */
+.btn-primary {
+    background-color: var(--primary);
+    color: white;
+}
+.btn-primary:hover:not(:disabled) {
+    background-color: var(--primary-hover);
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+.btn-danger {
+    background-color: transparent;
+    color: var(--danger);
+    border: 1px solid var(--danger);
+}
+.btn-danger:hover:not(:disabled) {
+    background-color: var(--danger);
+    color: white;
+}
+
+.btn-ghost {
+    background-color: transparent;
+    color: var(--text-muted);
+}
+.btn-ghost:hover {
+    background-color: rgba(0,0,0,0.05);
+    color: var(--text-main);
+}
+
+.btn-link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--primary);
+    font-weight: 600;
+    cursor: pointer;
+}
+.btn-link:hover {
+    text-decoration: underline;
 }

@@ -1,0 +1,135 @@
+.roomContainer {
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 0 20px 60px;
+}
+
+/* Шапка комнаты */
+.roomHeader {
+    background: var(--bg-card);
+    padding: 30px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    margin-bottom: 30px;
+    text-align: center;
+}
+
+.roomTitle {
+    margin: 0 0 10px;
+    font-size: 2rem;
+    font-weight: 800;
+}
+
+.roomCreator {
+    color: var(--text-muted);
+    font-size: 1rem;
+}
+
+/* Панель действий админа */
+.adminPanel {
+    background: #fef2f2; /* Светло-красный фон для админки */
+    border: 2px dashed #fecaca;
+    padding: 25px;
+    border-radius: var(--radius-lg);
+    margin-bottom: 40px;
+}
+
+.adminTitle {
+    margin-top: 0;
+    color: #991b1b;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.adminFormGroup {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+/* Карточка вопроса */
+.questionCard {
+    background: var(--bg-card);
+    padding: 30px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    margin-bottom: 30px;
+    border: 1px solid var(--border-color);
+}
+
+.questionText {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-top: 0;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+/* --- Варианты ответов (Голосование) --- */
+.choiceButton {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 18px 25px;
+    margin-bottom: 12px;
+    background: #f9fafb;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: 1.1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+}
+
+.choiceButton:hover:not(:disabled) {
+    background: white;
+    border-color: var(--primary);
+    transform: translateX(5px); /* Небольшой сдвиг вправо */
+    box-shadow: var(--shadow-sm);
+}
+
+/* Когда вариант выбран */
+.choiceSelected {
+    background: #eef2ff !important; /* Очень светлый индиго */
+    border-color: var(--primary) !important;
+    color: var(--primary);
+    font-weight: 700;
+}
+
+/* --- Результаты (Прогресс-бары) --- */
+.resultItem {
+    margin-bottom: 18px;
+}
+
+.resultHeader {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.resultTrack {
+    height: 14px;
+    background: #e5e7eb;
+    border-radius: 7px;
+    overflow: hidden;
+}
+
+.resultFill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), #8b5cf6);
+    border-radius: 7px;
+    transition: width 0.6s ease-out;
+}
+
+/* Стиль для варианта-победителя */
+.winner .resultHeader {
+    color: var(--success);
+    font-weight: 700;
+}
+.winner .resultFill {
+    background: var(--success);
+}

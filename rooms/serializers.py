@@ -2,7 +2,6 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import Room, Question, Choice, Vote
 
-# Получаем модель пользователя, чтобы проверять занятость имен
 User = get_user_model()
 
 
@@ -18,17 +17,18 @@ class ChoiceSerializer(serializers.ModelSerializer):
         return obj.votes.count()
 
     def get_voters(self, obj):
-        # ВАЖНО: Определяем, кто смотрит (Создатель или нет)
         request = self.context.get('request')
         user = request.user if request else None
 
-        # Определяем создателя комнаты
+        # Определяем создателя (Хоста)
         room_creator = obj.question.room.creator
         is_creator = False
         if user and user.is_authenticated:
-            is_creator = (user.display_name == room_creator) or (user.email == room_creator)
+            # Сравниваем display_name или email
+            current_name = user.display_name if user.display_name else user.email
+            is_creator = (current_name == room_creator) or (user.email == room_creator)
 
-        # Показываем список только Создателю ИЛИ если включены итоги
+        # Показываем список проголосовавших, если это Хост ИЛИ результаты открыты всем
         if is_creator or obj.question.show_results:
             voters_list = []
             for vote in obj.votes.all():
@@ -50,12 +50,27 @@ class ChoiceSerializer(serializers.ModelSerializer):
 
 class QuestionSerializer(serializers.ModelSerializer):
     choices = ChoiceSerializer(many=True, read_only=True)
-    # Позволяем привязывать вопрос к комнате через ID
     room = serializers.PrimaryKeyRelatedField(queryset=Room.objects.all())
+    user_voted_choice = serializers.SerializerMethodField()
 
     class Meta:
         model = Question
-        fields = ['id', 'room', 'text', 'choices', 'is_active', 'show_results']
+        fields = ['id', 'room', 'text', 'choices', 'is_active', 'show_results', 'user_voted_choice']
+
+    def get_user_voted_choice(self, obj):
+        request = self.context.get('request')
+        if not request: return None
+
+        user = request.user
+        guest_name = request.query_params.get('guest_name')
+
+        vote = None
+        if user and user.is_authenticated:
+            vote = Vote.objects.filter(choice__question=obj, user=user).first()
+        elif guest_name:
+            vote = Vote.objects.filter(choice__question=obj, guest_nickname=guest_name).first()
+
+        return vote.choice.id if vote else None
 
 
 class RoomSerializer(serializers.ModelSerializer):
@@ -68,7 +83,8 @@ class RoomSerializer(serializers.ModelSerializer):
 
 
 class VoteSerializer(serializers.ModelSerializer):
-    guest_nickname = serializers.CharField(required=False, allow_blank=True)
+    # ИСПРАВЛЕНИЕ: Добавили allow_null=True
+    guest_nickname = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     user = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
@@ -81,22 +97,17 @@ class VoteSerializer(serializers.ModelSerializer):
         choice = data['choice']
         question = choice.question
 
-        # 1. Проверка статуса
         if not question.is_active:
             raise serializers.ValidationError("Голосование остановлено создателем.")
 
-        # 2. Проверка имени гостя
+        # Логика проверки имени
         if not user.is_authenticated:
             if not nickname:
                 raise serializers.ValidationError("Гость должен представиться!")
-
-            # --- НОВАЯ ЗАЩИТА ОТ ДВОЙНИКОВ ---
-            # Проверяем, есть ли уже такой зарегистрированный юзер
             if User.objects.filter(display_name__iexact=nickname).exists():
-                raise serializers.ValidationError("Это имя занято зарегистрированным пользователем. Выберите другое.")
-            # ---------------------------------
+                raise serializers.ValidationError("Это имя занято зарегистрированным пользователем.")
 
-        # 3. Проверка на повторное голосование
+        # Проверка на повторное голосование
         if user.is_authenticated:
             has_voted = Vote.objects.filter(user=user, choice__question=question).exists()
         else:
@@ -114,7 +125,6 @@ class VoteSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
-# Сериализатор для создания вариантов (нужен для функционала добавления вопросов)
 class ChoiceCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Choice

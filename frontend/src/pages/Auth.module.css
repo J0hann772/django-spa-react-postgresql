@@ -1,0 +1,50 @@
+.centeredContainer {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.authCard {
+    background: var(--bg-card);
+    padding: 40px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    width: 100%;
+    max-width: 450px; /* Ограничиваем ширину */
+    text-align: center;
+}
+
+.title {
+    margin-top: 0;
+    margin-bottom: 25px;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.formStack {
+    display: flex;
+    flex-direction: column;
+    gap: 20px; /* Расстояние между полями */
+    margin-bottom: 25px;
+}
+
+.submitBtn {
+    width: 100%; /* Кнопка во всю ширину */
+    padding: 14px;
+    font-size: 1.1rem;
+}
+
+.footerLink {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+}
+.footerLink a {
+    color: var(--primary);
+    font-weight: 600;
+}
+.footerLink a:hover {
+    text-decoration: underline;
+}

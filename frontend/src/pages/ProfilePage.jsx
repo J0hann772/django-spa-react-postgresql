@@ -1,53 +1,54 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import api from '../api/client';
 import AuthContext from '../context/AuthContext';
+import { Link } from 'react-router-dom';
+import styles from './Auth.module.css'; // И здесь тот же стиль карточки
 
 const ProfilePage = () => {
-    const [displayName, setDisplayName] = useState("");
-    const { logoutUser } = useContext(AuthContext);
+    let { user } = useContext(AuthContext);
+    const [displayName, setDisplayName] = useState('');
+    const [msg, setMsg] = useState('');
 
     useEffect(() => {
-        api.get('/api/auth/users/me/')
-            .then(res => {
-                if (res.data.display_name) setDisplayName(res.data.display_name);
-            })
-            .catch(err => console.error(err));
-    }, []);
+        if(user) {
+            api.get('/api/auth/users/me/').then(r => setDisplayName(r.data.display_name || ""));
+        }
+    }, [user]);
 
     const updateProfile = async (e) => {
         e.preventDefault();
         try {
             await api.patch('/api/auth/users/me/', { display_name: displayName });
-            alert("Профиль обновлен!");
-            window.location.href = '/';
-        } catch (error) {
-            alert("Ошибка: " + JSON.stringify(error.response?.data));
-        }
+            setMsg("Профиль обновлен! ✅");
+        } catch { setMsg("Ошибка обновления ❌"); }
     };
 
     return (
-        <div style={{ maxWidth: '500px', margin: '50px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '10px', fontFamily: 'Arial' }}>
-            <h2>👤 Настройка профиля</h2>
-            <form onSubmit={updateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                <div>
-                    <label>Ваш nickname:</label>
-                    <input
-                        type="text"
-                        value={displayName}
-                        onChange={e => setDisplayName(e.target.value)}
-                        placeholder="Введите ник..."
-                        required
-                        style={{ width: '100%', padding: '10px', marginTop: '5px', boxSizing: 'border-box' }}
-                    />
+        <div className={styles.centeredContainer} style={{alignItems: 'flex-start', paddingTop: '60px'}}>
+             <div className={styles.authCard} style={{textAlign: 'left'}}>
+                <div style={{marginBottom: '20px'}}>
+                     <Link to="/" className="global-btn btn-ghost" style={{paddingLeft: 0}}>← Назад на главную</Link>
                 </div>
-                <button type="submit" style={{ padding: '10px', background: '#2980b9', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>
-                    Сохранить изменения
-                </button>
-            </form>
-            <hr style={{ margin: '20px 0' }} />
-            <button onClick={logoutUser} style={{ background: 'none', color: 'red', border: 'none', cursor: 'pointer' }}>Выйти из аккаунта</button>
+                <h2 className={styles.title}>Ваш профиль</h2>
+                {user && <p className="text-muted" style={{marginBottom: '20px'}}>Email: {user.email}</p>}
+
+                <form onSubmit={updateProfile}>
+                    <div className={styles.formStack}>
+                         <label htmlFor="nickname" style={{fontWeight: 600}}>Отображаемое имя (Nickname):</label>
+                        <input
+                            id="nickname"
+                            type="text"
+                            value={displayName}
+                            onChange={e => setDisplayName(e.target.value)}
+                            placeholder="Как вас называть в комнатах?"
+                            className="global-input"
+                        />
+                    </div>
+                    <button type="submit" className="global-btn btn-primary">Сохранить изменения</button>
+                </form>
+                {msg && <p style={{marginTop: '15px', fontWeight: 500}}>{msg}</p>}
+            </div>
         </div>
     );
 };
-
 export default ProfilePage;

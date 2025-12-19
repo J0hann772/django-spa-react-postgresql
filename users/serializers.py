@@ -19,13 +19,16 @@ class LogoutSerializer(serializers.Serializer):
             # И отправляем его в черный список
             token.blacklist()
         except TokenError:
-            # Если токен уже протух или фейковый - ничего страшного
             pass
 
 class CustomUserCreateSerializer(UserCreateSerializer):
+    # Явно указываем, что поле обязательно (required=True)
+    display_name = serializers.CharField(required=True, max_length=50)
+
     class Meta(UserCreateSerializer.Meta):
         model = User
-        fields = ('id', 'email', 'username', 'password', 'display_name')
+        # Обязательно добавляем display_name в поля
+        fields = tuple(UserCreateSerializer.Meta.fields) + ('display_name',)
 
 class CustomUserSerializer(UserSerializer):
     class Meta(UserSerializer.Meta):
